@@ -1,0 +1,167 @@
+// Схема базы данных Arzonroq.uz
+// Соответствует структуре из ТЗ, раздел 13
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CarStatus {
+  PENDING_VERIFICATION // На проверке — продавец подал заявку, ждёт менеджера
+  AVAILABLE // В продаже
+  SOLD // Продано
+  DELISTED // Снято с продажи (включая авто-снятие по лимиту обращений)
+  REJECTED // Отклонено менеджером (не прошло проверку)
+  ARCHIVED // В архиве: объявление удалено, но текстовая карточка остаётся
+           // для SEO (без фото — все файлы удалены с диска при архивации)
+
+  @@map("car_status")
+}
+
+enum Transmission {
+  AUTOMATIC // Автомат
+  MANUAL // Механика
+
+  @@map("transmission")
+}
+
+enum FuelType {
+  PETROL // Бензин
+  DIESEL // Дизель
+  GAS // Газ
+  ELECTRIC // Электро
+  HYBRID // Гибрид
+
+  @@map("fuel_type")
+}
+
+model Seller {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String   @unique
+  telegramId String?  @unique @map("telegram_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  cars Car[]
+
+  @@map("sellers")
+}
+
+model Car {
+  id           String       @id @default(cuid())
+  brand        String
+  model        String
+  year         Int
+  mileage      Int
+  region       String
+  price        Int
+  transmission Transmission
+  fuelType     FuelType     @map("fuel_type")
+  description  String?
+  status       CarStatus    @default(PENDING_VERIFICATION)
+  sellerId     String       @map("seller_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  // Дата последнего подтверждения актуальности продавцом через Telegram-бота.
+  // Если прошло >24ч без ответа — авто скрывается с сайта (см. ТЗ п.8)
+  lastConfirmedAt DateTime? @map("last_confirmed_at")
+
+  // --- Верификация перед публикацией ---
+  // Продавец загружает при подаче заявки: фото техпаспорта (перед/зад),
+  // 4 фото авто с определёнными ракурсами (перед/зад/левый бок/правый бок).
+  // VIN вводит МЕНЕДЖЕР при модерации, глядя на фото техпаспорта (без OCR
+  // на данном этапе — см. README). Используется для защиты от дублей:
+  // одна и та же машина не может быть выставлена повторно под другим
+  // продавцом/заявкой, пока активна (см. проверку в approve route).
+  // Авто не появляется на сайте, пока менеджер не одобрит (status = AVAILABLE).
+  vin                     String?
+  registrationDocFrontUrl String?  @map("registration_doc_front_url")
+  registrationDocBackUrl  String?  @map("registration_doc_back_url")
+  photoFrontUrl           String?  @map("photo_front_url")
+  photoBackUrl             String?  @map("photo_back_url")
+  photoLeftUrl             String?  @map("photo_left_url")
+  photoRightUrl            String?  @map("photo_right_url")
+
+  // Был ли автомобиль в аварии — продавец указывает сам, видно покупателю
+  // и менеджеру при модерации как часть честной информации об авто.
+  isDamaged       Boolean @default(false) @map("is_damaged")
+  damageDescription String? @map("damage_description")
+
+  // Менеджер сверяет цену продавца с ценами на досках объявлений (OLX, Avto.uz)
+  // вручную и фиксирует свою референсную цену для прозрачности решения.
+  marketReferencePrice Int?    @map("market_reference_price")
+  rejectionReason      String? @map("rejection_reason")
+  reviewedAt           DateTime? @map("reviewed_at")
+  reviewedBy           String?   @map("reviewed_by") // username админа
+
+  // Счётчик уникальных контактов (нажатий "Bog'lanish" разными посетителями —
+  // см. ContactClick). При достижении CONTACT_LIMIT (50) авто автоматически
+  // снимается с продажи (DELISTED) — слишком много обращений без продажи
+  // означает, что объявление, скорее всего, неактуально.
+  contactCount Int @default(0) @map("contact_count")
+
+  seller        Seller         @relation(fields: [sellerId], references: [id])
+  images        CarImage[]
+  contactClicks ContactClick[]
+
+  @@index([status, price])
+  @@index([brand, model, year])
+  @@index([region])
+  @@index([vin])
+  @@map("cars")
+}
+
+model CarImage {
+  id       String @id @default(cuid())
+  carId    String @map("car_id")
+  imageUrl String @map("image_url")
+  position Int    @default(0)
+
+  car Car @relation(fields: [carId], references: [id], onDelete: Cascade)
+
+  @@index([carId])
+  @@map("car_images")
+}
+
+// Фиксирует уникальное нажатие кнопки "Bog'lanish" по паре (IP + cookie),
+// чтобы не считать повторные клики одного и того же посетителя.
+model ContactClick {
+  id          String   @id @default(cuid())
+  carId       String   @map("car_id")
+  visitorHash String   @map("visitor_hash") // хэш от IP + cookie-идентификатора
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  car Car @relation(fields: [carId], references: [id], onDelete: Cascade)
+
+  @@unique([carId, visitorHash])
+  @@index([carId])
+  @@map("contact_clicks")
+}
+
+// Простая модель администратора для входа в админку (раздел 9 ТЗ)
+model Admin {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("admins")
+}
+
+// Модели, которых нет в статическом справочнике (src/lib/types.ts), но
+// которые продавец указал вручную при подаче заявки. Когда менеджер
+// одобряет такую заявку, пара (brand, model) сохраняется сюда и начинает
+// отображаться в фильтрах/форме наравне со встроенным списком.
+model CustomModel {
+  id        String   @id @default(cuid())
+  brand     String
+  model     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([brand, model])
+  @@map("custom_models")
+}
