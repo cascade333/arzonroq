@@ -23,6 +23,7 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/uploads") ||
     pathname === "/robots.txt" ||
     pathname === "/sitemap.xml" ||
+    pathname === "/llms.txt" ||
     pathname === "/favicon.ico"
   ) {
     return NextResponse.next();
@@ -45,5 +46,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|api|admin|uploads|favicon.ico|robots.txt|sitemap.xml).*)"],
+  matcher: ["/((?!_next|api|admin|uploads|favicon.ico|robots.txt|sitemap.xml|llms.txt).*)"],
 };
