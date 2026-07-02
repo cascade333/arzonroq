@@ -21,6 +21,7 @@ interface ModerationCar {
   damageDescription: string | null;
   description: string | null;
   sourceUrl: string | null;
+  images: { id: string; imageUrl: string }[];
   createdAt: Date;
   seller: { name: string; phone: string };
 }
@@ -112,6 +113,19 @@ export default function ModerationCard({ car }: { car: ModerationCar }) {
             за реальными фото и VIN.
           </span>
         </a>
+      )}
+      {car.images.length > 0 && (
+        <div className="mb-3 flex gap-2 overflow-x-auto">
+          {car.images.map((img) => (
+            <a key={img.id} href={img.imageUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
+              <img
+                src={img.imageUrl}
+                alt="Фото авто"
+                className="h-24 w-32 rounded-lg border border-slate-200 object-cover"
+              />
+            </a>
+          ))}
+        </div>
       )}
 
       <div className="flex flex-wrap items-start justify-between gap-2">

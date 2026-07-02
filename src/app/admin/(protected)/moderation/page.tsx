@@ -4,7 +4,7 @@ import ModerationCard from "@/components/admin/ModerationCard";
 export default async function ModerationPage() {
   const pending = await prisma.car.findMany({
     where: { status: "PENDING_VERIFICATION" },
-    include: { seller: true },
+    include: { seller: true, images: { orderBy: { position: "asc" } } },
     orderBy: { createdAt: "asc" },
   });
 
