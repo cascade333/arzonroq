@@ -91,7 +91,7 @@ const REGION_MAP: Record<string, string> = {
   "Чирчике": "Чирчик", "Алмалыке": "Алмалык", "Шахрисабзе": "Шахрисабз",
 };
 
-async function fetchDetails(url: string): Promise<{ year: number | null; mileage: number; region: string; html: string }> {
+async function fetchDetails(url: string): Promise<{ year: number | null; mileage: number; region: string; html: string; sellerText: string }> {
   const raw = await fetchHtml(url);
   const html = raw.replace(/&nbsp;/g, " ");
   const title = (html.match(/<title>([^<]*)<\/title>/) || [])[1] || "";
@@ -99,7 +99,13 @@ async function fetchDetails(url: string): Promise<{ year: number | null; mileage
   const kmM = html.match(/([\d][\d\s]{0,9})\s*км/);
   const mileage = kmM ? Number(kmM[1].replace(/[^\d]/g, "")) : 0;
   const regionM = title.match(/ в ([А-ЯЁA-Z][а-яёa-z-]+)/);
+  // Текст продавца: блок class="description-text", чистим теги и пробелы
+  const descM = html.match(/class="description-text"[^>]*>([\s\S]*?)<\/div>/);
+  const sellerText = descM
+    ? descM[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2000)
+    : "";
   return {
+    sellerText,
     year: yearM ? Number(yearM[1]) : null,
     mileage: isFinite(mileage) ? mileage : 0,
     region: regionM ? (REGION_MAP[regionM[1]] || regionM[1]) : "Ташкент",
@@ -153,7 +159,13 @@ async function getSystemSeller() {
 // Докачивает фото к уже созданным черновикам с sourceUrl, но без картинок
 async function backfillPhotos() {
   const cars = await prisma.car.findMany({
-    where: { sourceUrl: { not: null }, images: { none: {} } },
+    where: {
+      sourceUrl: { not: null },
+      OR: [
+        { images: { none: {} } },
+        { description: { contains: "[Автоматически найдено парсером" } },
+      ],
+    },
     select: { id: true, brand: true, model: true, sourceUrl: true },
   });
   console.log(`Черновиков без фото: ${cars.length}`);
@@ -163,7 +175,13 @@ async function backfillPhotos() {
       const photos = extractPhotoUrls(d.html);
       if (!photos.length) { console.log(`[${car.brand} ${car.model}] фото на странице не найдены`); continue; }
       const n = await attachPhotos(car.id, photos, car.sourceUrl!);
-      console.log(`[${car.brand} ${car.model}] сохранено фото: ${n}`);
+      if (d.sellerText) {
+        await prisma.car.update({
+          where: { id: car.id },
+          data: { description: d.sellerText + "\n\n[Найдено парсером Avtoelon — требует проверки: реальные фото, VIN, связь с продавцом]" },
+        });
+      }
+      console.log(`[${car.brand} ${car.model}] сохранено фото: ${n}, описание: ${d.sellerText ? "обновлено" : "нет текста"}`);
     } catch (e: any) {
       console.error(`[${car.brand} ${car.model}] ОШИБКА: ${e.message}`);
     }
@@ -213,8 +231,8 @@ async function main() {
               sellerId: seller!.id,
               sourceUrl: c.url,
               description:
-                `[Автоматически найдено парсером Avtoelon]\n` +
-                `Требует проверки менеджером: реальные фото, VIN, связь с продавцом.`,
+                (d.sellerText ? d.sellerText + "\n\n" : "") +
+                `[Найдено парсером Avtoelon — требует проверки: реальные фото, VIN, связь с продавцом]`,
             },
           });
           const photos = extractPhotoUrls(d.html);
