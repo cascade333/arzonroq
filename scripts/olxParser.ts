@@ -62,7 +62,7 @@ async function fetchHtml(url: string): Promise<string> {
 async function fetchItems(slug: string): Promise<Item[]> {
   const html = await fetchHtml(`https://avtoelon.uz/avto/${slug}/?sort_by=price-asc`);
   const items: Item[] = [];
-  const re = /listing\.items\.push\((\{.*?\})\);/gs;
+  const re = /listing\.items\.push\((\{[\s\S]*?\})\);/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     try {
