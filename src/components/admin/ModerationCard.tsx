@@ -20,6 +20,7 @@ interface ModerationCar {
   isDamaged: boolean;
   damageDescription: string | null;
   description: string | null;
+  sourceUrl: string | null;
   createdAt: Date;
   seller: { name: string; phone: string };
 }
@@ -97,6 +98,22 @@ export default function ModerationCard({ car }: { car: ModerationCar }) {
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
+      {car.sourceUrl && (
+        <a
+          href={car.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mb-3 flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 hover:bg-blue-100"
+        >
+          <span>🔗</span>
+          <span>
+            Найдено парсером на Avtoelon — открыть оригинальное объявление.
+            Фото скачаны автоматически, перед публикацией свяжитесь с продавцом
+            за реальными фото и VIN.
+          </span>
+        </a>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="font-semibold text-slate-900">
