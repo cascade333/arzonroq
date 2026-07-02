@@ -90,6 +90,7 @@ model Car {
   // и менеджеру при модерации как часть честной информации об авто.
   isDamaged       Boolean @default(false) @map("is_damaged")
   damageDescription String? @map("damage_description")
+  sourceUrl String? @map("source_url")
 
   // Менеджер сверяет цену продавца с ценами на досках объявлений (OLX, Avto.uz)
   // вручную и фиксирует свою референсную цену для прозрачности решения.
